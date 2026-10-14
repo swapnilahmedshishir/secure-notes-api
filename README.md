@@ -17,6 +17,38 @@ npm start                   # or: npm run dev
 `npm test` runs the integration suite against an in-memory MongoDB.
 `npm run explain` prints which index each query/pipeline uses on your real database (run it after adding some data).
 
+## Deploying to Vercel (serverless)
+
+`api/index.js` is the serverless entry point: it connects to MongoDB with a
+connection cached on `globalThis` (warm invocations reuse the socket, every cold
+start connects once) and then delegates to the Express app. `vercel.json` routes
+every request to that single function. `src/server.js` stays the local-dev entry.
+
+One-time setup:
+
+1. **MongoDB Atlas → Network Access:** add `0.0.0.0/0` (allow from anywhere).
+   Vercel functions use dynamic IPs, so a narrower allowlist will block them.
+2. **Vercel → Project → Settings → Environment Variables** (all environments):
+
+   | Key | Value |
+   | --- | --- |
+   | `NODE_ENV` | `production` |
+   | `MONGODB_URI` | your `mongodb+srv://…` connection string |
+   | `JWT_SECRET` | random string, 32+ characters |
+   | `JWT_EXPIRES_IN` | `1d` |
+   | `BCRYPT_SALT_ROUNDS` | `12` |
+   | `CORS_ORIGIN` | comma-separated frontend origins, e.g. `https://secure-notes-client.vercel.app` |
+   | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_USERNAME` | only needed for `npm run seed:admin` |
+
+3. **Create the first admin** (run locally once, it writes to Atlas through your `.env`):
+   `ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... npm run seed:admin`
+4. Deploy (`vercel --prod` or push to the connected Git branch). The function
+   takes about a second on the first request after a cold start (DB connect +
+   index init); warm requests are single-digit milliseconds.
+
+The React client needs `VITE_API_BASE_URL=https://<your-api>.vercel.app/api` as
+its own Vercel environment variable.
+
 ## Structure
 
 ```
